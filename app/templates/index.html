@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>StockBox</title>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --text:#1c2230; --muted:#6b7385; --line:#e3e6ec; --accent:#2f5bea; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#12151c; --card:#1b202b; --text:#e8ebf2; --muted:#8c94a8; --line:#2b3242; --accent:#6c8cff; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:24px 16px; background:var(--bg); color:var(--text);
+         font:15px/1.5 -apple-system, system-ui, sans-serif; }
+  main { max-width:960px; margin:0 auto; }
+  h1 { margin:0 0 16px; }
+  form.add { display:flex; gap:8px; margin-bottom:8px; }
+  input[type=text] { flex:1; padding:10px 12px; border:1px solid var(--line); border-radius:8px;
+                     background:var(--card); color:var(--text); font:inherit; }
+  button { padding:10px 16px; border:0; border-radius:8px; background:var(--accent); color:#fff;
+           font:inherit; cursor:pointer; }
+  button.ghost { background:none; color:var(--muted); padding:2px 8px; }
+  .bar { display:flex; justify-content:space-between; align-items:center; margin:8px 0 20px; color:var(--muted); }
+  .key { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 16px; margin-bottom:20px; }
+  .key h2 { margin:0 0 8px; font-size:13px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); }
+  .key ul { list-style:none; margin:0; padding:0; display:grid; gap:6px; }
+  .key li { display:flex; gap:10px; align-items:baseline; font-size:13px; color:var(--muted); }
+  .key li a { text-decoration:none; }
+  .tag { display:inline-block; padding:2px 10px; border-radius:999px; font-size:12px; font-weight:600;
+         white-space:nowrap; background:color-mix(in srgb, var(--c) 16%, transparent); color:var(--c);
+         border:1px solid color-mix(in srgb, var(--c) 40%, transparent); }
+  .tag.on { background:var(--c); color:#fff; }
+  .t-Defensive { --c:#2f8f5b; } .t-Value { --c:#2f5bea; } .t-Growth { --c:#c2570c; }
+  .t-Dividend { --c:#8a3fc7; } .t-Cyclical { --c:#a8820a; } .t-High-Volatility { --c:#d64545; }
+  .t-Unclassified { --c:#6b7385; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(280px, 1fr)); gap:16px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; }
+  .card .top { display:flex; justify-content:space-between; align-items:flex-start; }
+  .card .sym { font-size:18px; font-weight:700; }
+  .card .nm { color:var(--muted); font-size:13px; margin-bottom:10px; }
+  .tags { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px; }
+  dl { display:grid; grid-template-columns:repeat(3, 1fr); gap:8px; margin:0; }
+  dl div { font-size:13px; } dt { color:var(--muted); font-size:11px; } dd { margin:0; font-weight:600; }
+  .filter { margin-bottom:12px; color:var(--muted); font-size:13px; }
+  .err { color:#d64545; font-size:13px; }
+  .empty { text-align:center; color:var(--muted); padding:48px 0; }
+</style>
+</head>
+<body>
+<main>
+  <h1>StockBox</h1>
+  <form class="add" method="post" action="/tickers">
+    <input type="text" name="symbols" placeholder="Enter tickers, e.g. AAPL, KO, JNJ" required autofocus>
+    <button>Add</button>
+  </form>
+  <div class="bar">
+    <span>{{ total }} ticker{{ '' if total == 1 else 's' }}</span>
+    {% if total %}<form method="post" action="/refresh"><button class="ghost">↻ Refresh all</button></form>{% endif %}
+  </div>
+
+  {% if total %}
+  <div class="key">
+    <h2>Key</h2>
+    <ul>
+      {% for name, desc, n in key %}{% if n %}
+      <li><a href="/?theme={{ name }}" class="tag t-{{ name|replace(' ', '-') }}{{ ' on' if active == name }}">{{ name }}</a>
+          <span>{{ desc }} · {{ n }}</span></li>
+      {% endif %}{% endfor %}
+    </ul>
+  </div>
+  {% if active %}<p class="filter">Showing: {{ active }} · <a href="/">clear filter</a></p>{% endif %}
+  {% endif %}
+
+  <div class="grid">
+    {% for t in tickers %}
+    <article class="card">
+      <div class="top">
+        <span class="sym">{{ t.symbol }}</span>
+        <form method="post" action="/tickers/{{ t.symbol }}/delete"><button class="ghost" title="Remove">✕</button></form>
+      </div>
+      <div class="nm">{{ t.name or '' }}{% if t.sector %} · {{ t.sector }}{% endif %}</div>
+      <div class="tags">
+        {% for tag in t.tags %}
+        <a href="/?theme={{ tag }}" class="tag t-{{ tag|replace(' ', '-') }}" title="{{ key|selectattr(0, 'equalto', tag)|map(attribute=1)|first }}" style="text-decoration:none">{{ tag }}</a>
+        {% endfor %}
+      </div>
+      <dl>
+        <div><dt>Price</dt><dd>{{ '%.2f'|format(t.price) if t.price is not none else '–' }}</dd></div>
+        <div><dt>P/E</dt><dd>{{ '%.1f'|format(t.pe) if t.pe is not none else '–' }}</dd></div>
+        <div><dt>P/B</dt><dd>{{ '%.2f'|format(t.pb) if t.pb is not none else '–' }}</dd></div>
+        <div><dt>Yield</dt><dd>{{ '%.2f%%'|format(t.dividend_yield) if t.dividend_yield is not none else '–' }}</dd></div>
+        <div><dt>Beta</dt><dd>{{ '%.2f'|format(t.beta) if t.beta is not none else '–' }}</dd></div>
+        <div><dt>Rev growth</dt><dd>{{ '%.1f%%'|format(t.revenue_growth) if t.revenue_growth is not none else '–' }}</dd></div>
+      </dl>
+    </article>
+    {% else %}
+    <div class="empty" style="grid-column:1/-1">{{ 'No tickers match this theme.' if active else 'No tickers yet. Add a few above to get started.' }}</div>
+    {% endfor %}
+  </div>
+
+  {% if failed %}
+  <p class="err">Last refresh failed for: {{ failed|map(attribute='symbol')|join(', ') }} (showing previously saved data).</p>
+  {% endif %}
+</main>
+</body>
+</html>
